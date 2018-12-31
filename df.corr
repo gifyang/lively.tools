@@ -1,7 +1,6 @@
-library(dplyr)
-library(caret
 
 correlations <- function(df, y.list = F, method = "pearson", adjust = "none", dummy.cat = F){
+library(caret)
   df <- df %>% as.data.frame() %>% Filter(function(x)(length(unique(na.omit(x)))>1),.)
   if(y.list != F){
     df.y <- df %>% select_(.dots = y.list)
