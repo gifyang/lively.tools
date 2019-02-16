@@ -1,0 +1,62 @@
+#' Zero Order Correlations
+#'
+#' This function runs the psych::corr.test function and then transforms the results into a dataframe.
+#'
+#' @param df refers to an object as a matrix or dataframe
+#' @param y.list takes a list of targeted outcomes
+#' @param method refers to corr methods available in psych::corr.test
+#' @param adjust refers to adjustment methods available in psych::corr.test
+#' @param dummy.cat if TRUE, runs the caret::dummyVars function to dummy code categorical varibles ahead of corr.test, with fullRank = F
+#'
+#' @keywords
+#'
+#' @export
+#'
+#' @examples
+
+correlations <- function(df, y.list = F, x.list = F, method = "pearson", adjust = "none", dummy.cat = F){
+  library(dplyr)
+  df <- df %>% as.data.frame() %>% Filter(function(x)(length(unique(na.omit(x)))>1),.)
+  if(y.list != F){
+    df.y <- df %>% select_(.dots = y.list)
+    if(x.list == F){
+      df.x <- df %>% select_(.dots = paste0("-", y.list))
+    } else {
+      df.x <- df %>% select_(.dots = x.list)
+    }
+  }
+  if(dummy.cat == T){
+    library(caret)
+    if(y.list != F){
+      dmy <- dummyVars("~ .", data = df.y, fullRank = F)
+      df.y <- predict(dmy, newdata = df.y) %>% as.data.frame()
+      dmy <- dummyVars("~ .", data = df.x, fullRank = F)
+      df.x <- predict(dmy, newdata = df.x) %>% as.data.frame()
+    } else {
+    dmy <- dummyVars("~ .", data = df, fullRank = F)
+    df <- predict(dmy, newdata = df) %>% as.data.frame()
+    }
+  } else{
+    if(y.list != F){
+      df.y <- df.y %>% select_if(function(col) is.numeric(col)|is.logical(col))
+      df.x <- df.x %>% select_if(function(col) is.numeric(col)|is.logical(col))
+    } else {
+      df <- df %>% select_if(function(col) is.numeric(col)|is.logical(col))
+    }
+  }
+  if(y.list != F){
+    a <- psych::corr.test(x = df.x, y = df.y, method = method, adjust = adjust)
+  } else{
+    a <- psych::corr.test(df, method = method, adjust = adjust)
+  }
+  a$r %>% as.data.frame() %>% rownames_to_column("x_value") %>% gather(y_value, r, -`x_value`) %>%
+    left_join(a$n %>% as.data.frame() %>% rownames_to_column("x_value") %>% gather(y_value, n, -`x_value`)) %>%
+    left_join(a$p %>% as.data.frame() %>% rownames_to_column("x_value") %>% gather(y_value, p, -`x_value`)) %>%
+    left_join(a$se %>% as.data.frame() %>% rownames_to_column("x_value") %>% gather(y_value, se, -`x_value`)) %>%
+    mutate(
+      abs_r = abs(r),
+      n = if(length(as.data.frame(.$n)) == 1) .$n else n
+    ) %>%
+    filter(x_value != y_value) %>%
+    arrange(desc(abs_r))
+}
