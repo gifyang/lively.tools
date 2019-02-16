@@ -1,0 +1,124 @@
+#' Descriptive Statistics
+#'
+#' This function runs descriptive statistics on each column in a dataframe and returns as a tidy dataframe, with options to dummy code categorical variables ahead of summarise. Dummy coding using caret::dummyVars
+#'
+#' @param df refers to a dataframe
+#' @param version refers to the type of summarization. Currently only supports "abbr" or abbreviated
+#' @param dummy.cat TRUE or FALSE - dummy code categorical variables ahead of summarise?
+#' @param dummy.lim Sets max limit of distinct values in categorical variables ahead of dummy coding to save computationally
+#' @param dummy.override takes a list of strings to target specific columns for dummy coding
+#'
+#' @keywords
+#'
+#' @export
+#'
+#' @examples
+
+descriptives <- function(df, version = "abbr", dummy.cat = F, dummy.lim = 10, dummy.override = F){
+  if(dummy.override != F){
+    dummy.cat <- T
+  }
+  if(dummy.cat == T){
+    if(dummy.override == F){
+    distinct.count <- df %>%
+      summarise_each(
+        funs(
+          `sepclass` = class(.),
+          `sepcount_distinct` = n_distinct(., na.rm = TRUE)
+        )
+      ) %>%
+      t() %>% as.data.frame() %>% rownames_to_column(., "rn") %>%
+      separate(rn, c("var_name", "key"), sep = "_sep") %>%
+      spread(key, V1) %>%
+      mutate(count_distinct = as.numeric(as.character(count_distinct))) %>%
+      filter(
+        !(class %in% c("numeric", "integer")) &
+          count_distinct < dummy.lim
+      ) %>%
+      select(var_name) %>% list() %>% unlist()
+    }else{
+      distinct.count = dummy.override
+    }
+    dmy <- dummyVars(paste("~", paste(distinct.count, collapse = "+")), data = df, fullRank = F)
+    df <- df %>%
+      bind_cols(
+        predict(dmy, newdata = df) %>% as.data.frame()
+      )
+  }
+  if(version == "abbr"){
+    bind_rows(
+      rolled_up_df_num <- df %>%
+        summarise_if(
+          is.numeric,
+          funs(
+            `sepclass` = class(.),
+            `sepcount` = n(),
+            `sepcount_real` = sum(!is.na(.)) - sum(. == "", na.rm = T),
+            `sepmean` = mean(., na.rm = TRUE),
+            `sepskew` = moments::skewness(., na.rm = TRUE),
+            `sepkurtosis` = moments::kurtosis(., na.rm = TRUE),
+            `sepmin` = min(., na.rm = TRUE),
+            `sepmax` = max(., na.rm = TRUE),
+            `sepstddev` = sd(., na.rm = TRUE),
+            `sepcount_distinct` = n_distinct(., na.rm = TRUE),
+            `sep.t01` = quantile(., probs=0.01, na.rm = TRUE),
+            `sep.t05` = quantile(., probs=0.05, na.rm = TRUE),
+            `sep.t25` = quantile(., probs=0.25, na.rm = TRUE),
+            `sep.t50` = median(., na.rm = TRUE),
+            `sep.t75` = quantile(., probs=0.75, na.rm = TRUE),
+            `sep.t95` = quantile(., probs=0.95, na.rm = TRUE),
+            `sepstd.err` =  sd(., na.rm = TRUE) / sqrt(sum(!is.na(.))),
+            `sep.t99` = quantile(., probs=0.99, na.rm = TRUE)
+          )
+        ) %>% t() %>% as.data.frame() %>% rownames_to_column(., "rn") %>%
+        separate(rn, c("var_name", "key"), sep = "_sep") %>%
+        spread(key, V1) %>%
+        mutate(
+          var_name = as.character(var_name),
+          class = as.character(class),
+        ) %>%
+        mutate_at(
+          vars(-var_name, -class),
+          funs(as.numeric(as.character(.)))
+        ),
+      if(df %>% select(which(sapply(.,class)=="character" | sapply(.,class)=="factor")) %>% ncol() > 0){
+        rolled_up_df_cat <- df %>%
+          mutate(TEMPCATEGORICAL123 = "TEMPCATEGORICAL123") %>%
+          select(which(sapply(.,class)=="character" | sapply(.,class)=="factor")) %>%
+          summarise_each(
+            funs(
+              `sepclass` = class(.),
+              `sepcount` = n(),
+              `sepcount_real` = sum(!is.na(.)) - sum(. == "", na.rm = T),
+              `sepcount_distinct` = n_distinct(., na.rm = TRUE)
+            )
+          ) %>% t() %>% as.data.frame() %>% rownames_to_column(., "rn") %>%
+          separate(rn, c("var_name", "key"), sep = "_sep") %>%
+          spread(key, V1) %>%
+          filter(!str_detect(var_name, "TEMPCATEGORICAL123")) %>%
+          mutate(
+            var_name = as.character(var_name),
+            class = as.character(class),
+          ) %>%
+          mutate_at(
+            vars(-var_name, -class),
+            funs(as.numeric(as.character(.)))
+          )
+      }
+    ) %>%
+      mutate(missing_data_rate = count_real / count) %>%
+      select(
+        var_name, class,
+        contains("count"), missing_data_rate,
+        mean, stddev, std.err,
+        skew, kurtosis,
+        min, max, contains(".q"),
+        contains(".t")
+      ) %>%
+      arrange(var_name) %>%
+      mutate_if(
+        is.numeric,
+        funs(round(.,5))
+      )
+  }
+}
