@@ -1,0 +1,42 @@
+#' Exploratory Factor Analysis
+#'
+#' This function runs the psych::corr.test function and then transforms the results into a dataframe.
+#'
+#' @param df refers to an object as a matrix or dataframe
+#' @param load.min sets the minimum loading to be considered in same factor
+#' @param num.factors sets the number of factors to return. If empty, uses nfact from psych::fa.parallel for number of factors
+#' @param rotate specifies type of rotation
+#' @param fm specifies type of factoring method
+#'
+#' @keywords
+#'
+#' @export
+#'
+#' @examples
+
+factor.analysis <- function(df, load.min = .4, num.factors = F, rotate = "oblimin", fm = "minres"){
+  fa.p <- psych::fa.parallel(df, fm = fm)
+  if(num.factors == F){
+    num.factors = fa.p$nfact
+  }
+  fa <- psych::fa(df, nfactors = num.factors, rotate = rotate, fm = fm)
+  fa$e.values
+  fa_df <- left_join(
+    fa$loadings %>%
+      unclass() %>%
+      as.data.frame() %>%
+      rownames_to_column() %>%
+      mutate_if(
+        is.numeric,
+        funs(limit = if_else(abs(.) >= load.min, ., NA_real_))
+      ),
+    fa$np.obs %>%
+      unclass() %>%
+      apply(., 1, max, na.rm = TRUE) %>%
+      as.data.frame() %>%
+      select(max.n = 1) %>%
+      rownames_to_column()
+  ) %>%
+    # arrange_(.dots = paste0("desc(",select(., contains("limit")) %>% colnames(), ")") %>% unlist()) %>%
+    select(rowname, contains("limit"), everything())
+}
