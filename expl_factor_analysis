@@ -40,3 +40,4 @@ factor.analysis <- function(df, load.min = .4, num.factors = F, rotate = "oblimi
     # arrange_(.dots = paste0("desc(",select(., contains("limit")) %>% colnames(), ")") %>% unlist()) %>%
     select(rowname, contains("limit"), everything())
 }
+
