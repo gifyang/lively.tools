@@ -60,3 +60,4 @@ correlations <- function(df, y.list = F, x.list = F, method = "pearson", adjust 
     filter(x_value != y_value) %>%
     arrange(desc(abs_r))
 }
+
