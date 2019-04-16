@@ -1,0 +1,87 @@
+#' Survival Analysis, Cox Regression
+#'
+#' This function runs the survival::coxph function and then transforms the results into a dataframe. With option to display results as a survival chart - survminer required.
+#'
+#' @param df refers to an object as a matrix or dataframe
+#' @param toe time of event: name of column with length of time taken for individual to experience event. If did not experience event, then list as time to present of the individual.
+#' @param event name of column of whether individual experienced the event. Binary, 1 or 0, 1 as experienced event, 0 as did not experience event.
+#' @param survival.time refers to length of total possible survival time. e.g. survived to 365 days
+#' @param target.formula takes formula as a string
+#' @param restrict if TRUE, restricts sample to only individuals with time to present greater than specified in next parameter
+#' @param ttp if restrict is TRUE, only individuals with time to present greater than this number will be included in sample
+#' @param chart if TRUE, runs survminer::ggsurvplot to fit chart
+#' @param ylim set uppper and/or lower bound for y axis
+#' @param xlim set upper and/or lower bound for x axis
+#'
+#' @keywords
+#'
+#' @export
+#'
+#' @examples
+
+survival.func <- function(
+  df, toe, event, survival.time, target.formula, restrict = F, ttp = "",
+  chart = F, ylim = F, xlim = F
+  ){
+  library(survival)
+  input <- paste0(
+    "if_else(",
+    toe,
+    "<",
+    survival.time,
+    " & ",
+    event,
+    " == 1,1,0)")
+  df <- df %>%
+    mutate_(
+      .dots = input
+    ) %>%
+    select(
+      surv.function.marker = length(.),
+      everything()
+    )
+  if(restrict == T){
+    input <- paste0(
+      ttp, ">=", survival.time
+    )
+    df <- df %>%
+      filter_(.dots = input)
+  }
+  cox.obj <- survival::coxph(
+    as.formula(paste0("Surv(", toe, ", surv.function.marker) ~ ", target.formula)),
+    data = df
+  )
+  output <- cox.obj %>%
+    summary() %>%
+    coefficients(.) %>%
+    as.data.frame() %>%
+    rownames_to_column
+
+  if(chart == T){
+    if(ylim == F){
+      ylim <- c(0,1)
+    }
+    if(xlim == F){
+      xlim <- c(0, survival.time)
+    }
+    fit <- survival::survfit(
+      cox.obj,
+      newdata = dataset %>% select_(target.formula) %>% unique(),
+      data = dataset
+      )
+    survminer::ggsurvplot(
+      fit,
+      conf.int = F,
+      ggtheme = theme_minimal(),
+      legend.labs = dataset %>% select_(target.formula) %>% unique() %>% list() %>% unlist(),
+      title = target.formula,
+      ylim = ylim,
+      xlim = xlim,
+      break.x.by = (xlim[2]-xlim[1])/2,
+      break.y.by = (ylim[2]-ylim[1])/2,
+      censor = F
+    )
+  } else{
+    output
+  }
+}
