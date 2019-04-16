@@ -88,3 +88,4 @@ anova.func <- function(df, formula = F, return.obj = F, y = F, x = F, inter = F,
     return(obj)
   }
 }
+
